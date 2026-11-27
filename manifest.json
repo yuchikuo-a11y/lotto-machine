@@ -1,0 +1,14 @@
+{
+  "name": "大樂透開獎機",
+  "short_name": "大樂透",
+  "description": "3D 大樂透開獎機：1–49 選 6 個號碼加特別號",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#1e293b",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
