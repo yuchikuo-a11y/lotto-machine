@@ -22,18 +22,28 @@ scene.background = new THREE.Color('#0f172a');
 scene.fog = new THREE.Fog('#0f172a', 18, 34);
 
 const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 100);
-function placeCamera() {
-  const a = innerWidth / innerHeight;
-  const d = a < 0.8 ? 15.5 : a < 1.2 ? 12 : 10;
-  camera.position.set(0, 1.6, d);
+const TARGET = new THREE.Vector3(0, 0.1, 0);
+// 讓整台機器剛好放在標題與下方按鈕之間的空間
+function frameCamera(keepAngle) {
+  const W = innerWidth, H = innerHeight;
+  const T = document.getElementById('top').offsetHeight, P = document.getElementById('panel').offsetHeight;
+  const extra = Math.abs(P - T), F = H + extra, U = Math.max(120, H - P - T);
+  camera.setViewOffset(W, F, 0, P > T ? extra : 0, W, H);
+  camera.aspect = W / F;
+  camera.updateProjectionMatrix();
+  const k = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  const d = Math.min(40, Math.max(9.5 * F / (k * U), 8 * F / (k * W)));
+  if (!keepAngle) camera.position.set(0, TARGET.y + d * 0.18, d);
+  else camera.position.sub(TARGET).setLength(d).add(TARGET);
+  scene.fog.near = d + 2; scene.fog.far = d + 18;
+  return d;
 }
-placeCamera();
-
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-controls.target.set(0, 0.4, 0);
-controls.minDistance = 6;
-controls.maxDistance = 22;
+controls.target.copy(TARGET);
+const fitD = frameCamera(false);
+controls.minDistance = fitD * 0.5;
+controls.maxDistance = fitD * 1.8;
 controls.maxPolarAngle = Math.PI * 0.55;
 
 scene.add(new THREE.AmbientLight('#ffffff', 0.55));
@@ -63,7 +73,7 @@ const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 1.2, 1.6, 32), meta
 neck.position.y = -2.1; neck.castShadow = true; scene.add(neck);
 const ring = new THREE.Mesh(new THREE.TorusGeometry(R + 0.04, 0.08, 16, 96), metal);
 ring.position.copy(C); ring.castShadow = true; scene.add(ring);
-const ring2 = ring.clone(); ring2.rotation.y = Math.PI / 2; scene.add(ring2);
+const ring2 = ring.clone(); ring2.rotation.x = Math.PI / 2; scene.add(ring2);
 
 // 玻璃球
 const glass = new THREE.Mesh(
@@ -322,9 +332,9 @@ renderer.setAnimationLoop(() => {
 });
 
 addEventListener('resize', () => {
-  camera.aspect = innerWidth / innerHeight;
-  camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  const d = frameCamera(true);
+  controls.minDistance = d * 0.5; controls.maxDistance = d * 1.8;
 });
 
 window.__lotto = { startDraw, get drawn() { return drawn.slice(); }, get drawing() { return drawing; } };
