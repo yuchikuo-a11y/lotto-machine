@@ -27,6 +27,8 @@
   .ball.special { outline: 3px solid #facc15; outline-offset: 2px; }
   .plus { color: #facc15; font-weight: 700; font-size: 13px; margin: 0 2px; }
   .hint { color: #94a3b8; font-size: 14px; }
+  #status { font-size: 13px; color: #fbbf24; min-height: 0; margin-top: 4px; }
+  #status:empty { display: none; }
   @keyframes pop { from { transform: scale(0); } to { transform: scale(1); } }
   #btns { display: flex; justify-content: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
   button { min-height: 46px; min-width: 76px; padding: 0 18px; border: 0; border-radius: 23px; font-size: 17px; font-weight: 700;
@@ -64,6 +66,7 @@
 <div id="toast"></div>
 <div id="panel">
   <div id="result"><span class="hint">按「開獎」開始</span></div>
+  <div id="status" class="hint"></div>
   <div id="btns">
     <button id="draw" class="primary">開獎</button>
     <button id="reset">重來</button>
@@ -84,6 +87,7 @@
     <label>總球數（2–99）<input id="inN" type="number" min="2" max="99" inputmode="numeric"></label>
     <label>開出號碼數（1–12）<input id="inPicks" type="number" min="1" max="12" inputmode="numeric"></label>
     <label>另開 1 個特別號<input id="inSp" type="checkbox"></label>
+    <label>連續開獎（開過的號碼不再出現）<input id="inCont" type="checkbox"></label>
     <div id="setHint"></div>
     <div class="row"><button id="setReset" style="margin-right:auto;background:#7f1d1d">全部重置</button><button id="setCancel">取消</button><button id="setOk" class="primary">套用</button></div>
   </div>
