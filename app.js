@@ -354,6 +354,25 @@ document.querySelectorAll('[data-preset]').forEach((b) => b.addEventListener('cl
   inN.value = n; inPicks.value = p; inSp.checked = sp === '1'; syncHint();
 }));
 $('setCancel').addEventListener('click', () => (dlg.style.display = 'none'));
+// 全部重置：恢復預設設定並清除紀錄（按兩次確認，避免誤按）
+const resetCfgBtn = $('setReset');
+let resetArmed = false, resetTimer;
+resetCfgBtn.addEventListener('click', () => {
+  if (!resetArmed) {
+    resetArmed = true; resetCfgBtn.textContent = '再按一次確認';
+    resetTimer = setTimeout(() => { resetArmed = false; resetCfgBtn.textContent = '全部重置'; }, 3000);
+    return;
+  }
+  clearTimeout(resetTimer); resetArmed = false; resetCfgBtn.textContent = '全部重置';
+  try { localStorage.removeItem('lotto-config'); localStorage.removeItem('lotto-history'); } catch {}
+  CFG = fixCfg({ n: 49, picks: 6, special: true });
+  dlg.style.display = 'none';
+  applyConfig(); resetAll();
+  if (histEl.style.display === 'block') showHistory();
+  toast.textContent = '已恢復預設並清除紀錄';
+  toast.style.background = 'rgba(0,0,0,.8)'; toast.style.color = '#fff'; toast.style.opacity = 1;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => (toast.style.opacity = 0), 1500);
+});
 $('setOk').addEventListener('click', () => {
   CFG = fixCfg({ n: inN.value, picks: inPicks.value, special: inSp.checked });
   try { localStorage.setItem('lotto-config', JSON.stringify(CFG)); } catch {}
