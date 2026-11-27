@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>大樂透開獎機</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1e293b">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0f172a; color: #f1f5f9;
+    font-family: system-ui, -apple-system, "Microsoft JhengHei", "PingFang TC", sans-serif; }
+  canvas { display: block; touch-action: none; }
+  #top { position: fixed; top: 0; left: 0; right: 0; padding: calc(env(safe-area-inset-top) + 12px) 16px 8px;
+    text-align: center; pointer-events: none; }
+  #top h1 { margin: 0; font-size: 22px; letter-spacing: 2px; text-shadow: 0 2px 8px #000; }
+  #top p { margin: 4px 0 0; font-size: 13px; color: #94a3b8; }
+  #panel { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 12px calc(env(safe-area-inset-bottom) + 12px);
+    background: linear-gradient(transparent, rgba(15,23,42,.92) 30%); text-align: center; }
+  #result { display: flex; justify-content: center; align-items: center; gap: 6px; min-height: 46px; flex-wrap: wrap; }
+  .ball { width: 40px; height: 40px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 17px; color: #111; box-shadow: inset -4px -5px 8px rgba(0,0,0,.25), 0 2px 6px rgba(0,0,0,.5);
+    animation: pop .35s ease-out; }
+  .ball.special { outline: 3px solid #facc15; outline-offset: 2px; }
+  .plus { color: #facc15; font-weight: 700; font-size: 13px; margin: 0 2px; }
+  .hint { color: #94a3b8; font-size: 14px; }
+  @keyframes pop { from { transform: scale(0); } to { transform: scale(1); } }
+  #btns { display: flex; justify-content: center; gap: 10px; margin-top: 10px; }
+  button { min-height: 46px; min-width: 96px; padding: 0 18px; border: 0; border-radius: 23px; font-size: 17px; font-weight: 700;
+    cursor: pointer; color: #fff; background: #334155; font-family: inherit; }
+  button.primary { background: linear-gradient(#ef4444, #b91c1c); box-shadow: 0 4px 14px rgba(239,68,68,.45); }
+  button:disabled { opacity: .45; cursor: default; }
+  #history { margin-top: 8px; font-size: 13px; color: #cbd5e1; max-height: 110px; overflow-y: auto; display: none; }
+  #history div { padding: 2px 0; }
+  #toast { position: fixed; top: 38%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,.75); padding: 10px 18px;
+    border-radius: 12px; font-size: 20px; font-weight: 700; opacity: 0; transition: opacity .3s; pointer-events: none; }
+  #note { font-size: 11px; color: #64748b; margin-top: 6px; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="top">
+  <h1>大樂透開獎機</h1>
+  <p>1–49 選 6 個號碼＋1 個特別號｜拖曳旋轉・雙指縮放・點球看號碼</p>
+</div>
+<div id="toast"></div>
+<div id="panel">
+  <div id="result"><span class="hint">按「開獎」開始</span></div>
+  <div id="btns">
+    <button id="draw" class="primary">開獎</button>
+    <button id="reset">重來</button>
+    <button id="histBtn">紀錄</button>
+  </div>
+  <div id="history"></div>
+  <div id="note">隨機選號僅供娛樂參考</div>
+</div>
+<script type="module" src="app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
+</script>
+</body>
+</html>
