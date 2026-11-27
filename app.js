@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 // ---------- 基本設定（可在「設定」修改，存在這台裝置） ----------
 const LIMITS = { minN: 2, maxN: 99, maxPicks: 12 };
 function loadCfg() {
-  let c = { n: 49, picks: 6, special: true };
+  let c = { n: 49, picks: 6, special: true, cont: false };
   try { c = { ...c, ...JSON.parse(localStorage.getItem('lotto-config') || '{}') }; } catch {}
   return fixCfg(c);
 }
@@ -13,7 +13,7 @@ function fixCfg(c) {
   const special = !!c.special && n >= 2;
   const maxPicks = Math.min(LIMITS.maxPicks, n - (special ? 1 : 0));
   const picks = Math.min(maxPicks, Math.max(1, Math.round(+c.picks) || 1));
-  return { n, picks, special };
+  return { n, picks, special, cont: !!c.cont };
 }
 let CFG = loadCfg();
 let N = CFG.n, PICKS = CFG.picks, SPECIAL = CFG.special;
@@ -181,13 +181,13 @@ function scatter() {
     b.position.copy(C).add(p);
     d.v.set(0, 0, 0); d.state = 'in'; d.anim = null;
     b.rotation.set(Math.random() * 6, Math.random() * 6, Math.random() * 6);
-    d.base = 1; b.scale.setScalar(1);
+    d.base = 1; b.scale.setScalar(1); b.visible = true;
   }
 }
 function applyConfig() {
   N = CFG.n; PICKS = CFG.picks; SPECIAL = CFG.special;
   buildBalls(); buildTray(); scatter();
-  document.getElementById('rule').textContent = `1–${N} 選 ${PICKS} 個號碼${SPECIAL ? '＋1 個特別號' : ''}`;
+  document.getElementById('rule').textContent = `1–${N} 選 ${PICKS} 個號碼${SPECIAL ? '＋1 個特別號' : ''}${CFG.cont ? '・連續開獎' : ''}`;
 }
 
 // ---------- 物理 ----------
@@ -255,8 +255,16 @@ function randInt(max) {
 
 // ---------- 開獎流程 ----------
 const $ = (id) => document.getElementById(id);
-const drawBtn = $('draw'), resetBtn = $('reset'), resultEl = $('result'), setBtn = $('setBtn');
-let drawing = false, drawn = [];
+const drawBtn = $('draw'), resetBtn = $('reset'), resultEl = $('result'), setBtn = $('setBtn'), statusEl = $('status');
+let drawing = false, drawn = [], drawnBalls = [], round = 0;
+const remaining = () => balls.filter((b) => b.userData.state === 'in').length;
+function renderStatus() {
+  if (!CFG.cont) { statusEl.textContent = ''; return; }
+  const left = remaining() - (drawing ? 0 : 0);
+  statusEl.textContent = round
+    ? `連續開獎 第 ${round} 輪｜已開出 ${N - left} 個號碼，剩 ${left} 顆`
+    : `連續開獎模式｜共 ${N} 顆，開過的號碼不會再出現`;
+}
 const wait = (ms) => new Promise((res) => setTimeout(res, ms));
 
 function ballHTML(n, special) {
@@ -264,10 +272,10 @@ function ballHTML(n, special) {
   return `<span class="ball${special ? ' special' : ''}" style="background:${colorOf(n)};width:${sz}px;height:${sz}px;font-size:${Math.round(sz * 0.42)}px">${String(n).padStart(2, '0')}</span>`;
 }
 function renderResult(done) {
-  const main = drawn.slice(0, PICKS), sp = SPECIAL ? drawn[PICKS] : undefined;
+  const main = drawn.slice(0, PICKS), sp = SPECIAL && drawn.length > PICKS ? drawn[PICKS] : undefined;
   const shown = done ? [...main].sort((a, b) => a - b) : main;
   let h = shown.map((n) => ballHTML(n)).join('');
-  if (sp) h += `<span class="plus">特別號</span>${ballHTML(sp, true)}`;
+  if (sp !== undefined) h += `<span class="plus">特別號</span>${ballHTML(sp, true)}`;
   resultEl.innerHTML = h || '<span class="hint">攪拌中…</span>';
 }
 
@@ -285,29 +293,42 @@ function launch(b, slot) {
 
 async function startDraw() {
   if (drawing) return;
+  if (drawn.length) {
+    if (CFG.cont) {
+      // 連續開獎：上一輪開出的球移出機器，不再放回
+      for (const b of drawnBalls) { b.userData.state = 'used'; b.visible = false; }
+    } else scatter();
+    drawn = []; drawnBalls = [];
+  }
+  const pool = balls.filter((b) => b.userData.state === 'in');
+  const count = Math.min(TOTAL(), pool.length);
+  if (count === 0) { showToast('號碼都開完了，請按「重來」'); return; }
   drawing = true; drawBtn.disabled = resetBtn.disabled = setBtn.disabled = true;
-  if (drawn.length) { scatter(); drawn = []; await wait(300); }
+  await wait(200);
   renderResult(false);
   blowing = 1;
   await wait(2200);
-  const pool = balls.slice();
-  for (let i = 0; i < TOTAL(); i++) {
+  for (let i = 0; i < count; i++) {
     const b = pool.splice(randInt(pool.length), 1)[0];
     launch(b, i);
     await wait(TOTAL() > 8 ? 1000 : 1350);
-    drawn.push(b.userData.n);
+    drawn.push(b.userData.n); drawnBalls.push(b);
     renderResult(false);
     await wait(250);
   }
   blowing = 0;
+  if (CFG.cont) round++;
   renderResult(true);
   saveHistory();
+  renderStatus();
   drawing = false; drawBtn.disabled = resetBtn.disabled = setBtn.disabled = false;
-  drawBtn.textContent = '再開一次';
+  if (CFG.cont && remaining() === 0) { drawBtn.textContent = '已全部開完'; drawBtn.disabled = true; }
+  else drawBtn.textContent = CFG.cont ? '下一輪' : '再開一次';
 }
 drawBtn.addEventListener('click', startDraw);
 function resetAll() {
-  scatter(); drawn = []; blowing = 0;
+  scatter(); drawn = []; drawnBalls = []; round = 0; blowing = 0;
+  drawBtn.disabled = false; renderStatus();
   resultEl.innerHTML = '<span class="hint">按「開獎」開始</span>';
   drawBtn.textContent = '開獎';
 }
@@ -320,8 +341,9 @@ function saveHistory() {
   const list = loadHistory();
   const main = drawn.slice(0, PICKS).sort((a, b) => a - b).map((n) => String(n).padStart(2, '0')).join(' ');
   const t = new Date();
-  const sp = SPECIAL ? `　特別號 ${String(drawn[PICKS]).padStart(2, '0')}` : '';
-  list.unshift(`${t.getMonth() + 1}/${t.getDate()} ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}　[${N}選${PICKS}]　${main}${sp}`);
+  const sp = SPECIAL && drawn.length > PICKS ? `　特別號 ${String(drawn[PICKS]).padStart(2, '0')}` : '';
+  const tag = CFG.cont ? `${N}選${PICKS} 第${round}輪` : `${N}選${PICKS}`;
+  list.unshift(`${t.getMonth() + 1}/${t.getDate()} ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}　[${tag}]　${main}${sp}`);
   try { localStorage.setItem('lotto-history', JSON.stringify(list.slice(0, 20))); } catch {}
   if (histEl.style.display === 'block') showHistory();
 }
@@ -337,18 +359,20 @@ $('histBtn').addEventListener('click', () => {
 });
 
 // ---------- 設定 ----------
-const dlg = $('settings'), inN = $('inN'), inPicks = $('inPicks'), inSp = $('inSp'), hint = $('setHint');
+const dlg = $('settings'), inN = $('inN'), inPicks = $('inPicks'), inSp = $('inSp'), inCont = $('inCont'), hint = $('setHint');
 function syncHint() {
-  const c = fixCfg({ n: inN.value, picks: inPicks.value, special: inSp.checked });
+  const c = fixCfg({ n: inN.value, picks: inPicks.value, special: inSp.checked, cont: inCont.checked });
   inPicks.max = Math.min(LIMITS.maxPicks, c.n - (c.special ? 1 : 0));
-  hint.textContent = `將從 1–${c.n} 號中開出 ${c.picks} 個號碼${c.special ? '，再加 1 個特別號' : ''}`;
+  const per = c.picks + (c.special ? 1 : 0);
+  hint.textContent = `將從 1–${c.n} 號中開出 ${c.picks} 個號碼${c.special ? '，再加 1 個特別號' : ''}` +
+    (c.cont ? `；連續開獎約可開 ${Math.ceil(c.n / per)} 輪，號碼不重複` : '');
 }
 setBtn.addEventListener('click', () => {
   if (drawing) return;
-  inN.value = CFG.n; inPicks.value = CFG.picks; inSp.checked = CFG.special; syncHint();
+  inN.value = CFG.n; inPicks.value = CFG.picks; inSp.checked = CFG.special; inCont.checked = CFG.cont; syncHint();
   dlg.style.display = 'flex';
 });
-for (const el of [inN, inPicks, inSp]) el.addEventListener('input', syncHint);
+for (const el of [inN, inPicks, inSp, inCont]) el.addEventListener('input', syncHint);
 document.querySelectorAll('[data-preset]').forEach((b) => b.addEventListener('click', () => {
   const [n, p, sp] = b.dataset.preset.split(',');
   inN.value = n; inPicks.value = p; inSp.checked = sp === '1'; syncHint();
@@ -365,16 +389,14 @@ resetCfgBtn.addEventListener('click', () => {
   }
   clearTimeout(resetTimer); resetArmed = false; resetCfgBtn.textContent = '全部重置';
   try { localStorage.removeItem('lotto-config'); localStorage.removeItem('lotto-history'); } catch {}
-  CFG = fixCfg({ n: 49, picks: 6, special: true });
+  CFG = fixCfg({ n: 49, picks: 6, special: true, cont: false });
   dlg.style.display = 'none';
   applyConfig(); resetAll();
   if (histEl.style.display === 'block') showHistory();
-  toast.textContent = '已恢復預設並清除紀錄';
-  toast.style.background = 'rgba(0,0,0,.8)'; toast.style.color = '#fff'; toast.style.opacity = 1;
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => (toast.style.opacity = 0), 1500);
+  showToast('已恢復預設並清除紀錄');
 });
 $('setOk').addEventListener('click', () => {
-  CFG = fixCfg({ n: inN.value, picks: inPicks.value, special: inSp.checked });
+  CFG = fixCfg({ n: inN.value, picks: inPicks.value, special: inSp.checked, cont: inCont.checked });
   try { localStorage.setItem('lotto-config', JSON.stringify(CFG)); } catch {}
   dlg.style.display = 'none';
   applyConfig(); resetAll();
@@ -383,10 +405,15 @@ $('setOk').addEventListener('click', () => {
 // ---------- 點球互動 ----------
 const ray = new THREE.Raycaster(), ptr = new THREE.Vector2(), toast = $('toast');
 let toastTimer;
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.style.background = 'rgba(0,0,0,.8)'; toast.style.color = '#fff'; toast.style.opacity = 1;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => (toast.style.opacity = 0), 1800);
+}
 renderer.domElement.addEventListener('pointerdown', (e) => {
   ptr.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   ray.setFromCamera(ptr, camera);
-  const hit = ray.intersectObjects(balls, false)[0];
+  const hit = ray.intersectObjects(balls.filter((b) => b.visible), false)[0];
   if (!hit) return;
   const b = hit.object, d = b.userData;
   d.pop = 1;
@@ -399,7 +426,7 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
   toastTimer = setTimeout(() => (toast.style.opacity = 0), 900);
 });
 
-applyConfig();
+applyConfig(); resetAll();
 
 // ---------- 動畫迴圈 ----------
 const clock = new THREE.Clock();
@@ -429,4 +456,4 @@ addEventListener('resize', () => {
   controls.minDistance = d * 0.5; controls.maxDistance = d * 1.8;
 });
 
-window.__lotto = { startDraw, get cfg() { return CFG; }, get balls() { return balls.length; }, get drawn() { return drawn.slice(); }, get drawing() { return drawing; } };
+window.__lotto = { startDraw, get round() { return round; }, get remaining() { return remaining(); }, get cfg() { return CFG; }, get balls() { return balls.length; }, get drawn() { return drawn.slice(); }, get drawing() { return drawing; } };
