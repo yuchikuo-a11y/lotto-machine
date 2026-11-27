@@ -1,12 +1,28 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-// ---------- 基本設定 ----------
-const N = 49, PICKS = 6;
+// ---------- 基本設定（可在「設定」修改，存在這台裝置） ----------
+const LIMITS = { minN: 2, maxN: 99, maxPicks: 12 };
+function loadCfg() {
+  let c = { n: 49, picks: 6, special: true };
+  try { c = { ...c, ...JSON.parse(localStorage.getItem('lotto-config') || '{}') }; } catch {}
+  return fixCfg(c);
+}
+function fixCfg(c) {
+  const n = Math.min(LIMITS.maxN, Math.max(LIMITS.minN, Math.round(+c.n) || 49));
+  const special = !!c.special && n >= 2;
+  const maxPicks = Math.min(LIMITS.maxPicks, n - (special ? 1 : 0));
+  const picks = Math.min(maxPicks, Math.max(1, Math.round(+c.picks) || 1));
+  return { n, picks, special };
+}
+let CFG = loadCfg();
+let N = CFG.n, PICKS = CFG.picks, SPECIAL = CFG.special;
+const TOTAL = () => PICKS + (SPECIAL ? 1 : 0);
 const R = 2.6;            // 球體半徑
-const r = 0.3;            // 號碼球半徑
+let r = 0.3;              // 號碼球半徑（球越多越小）
 const C = new THREE.Vector3(0, 1.2, 0); // 球體中心
-const colorOf = (n) => n <= 10 ? '#facc15' : n <= 20 ? '#60a5fa' : n <= 30 ? '#f87171' : n <= 40 ? '#4ade80' : '#c084fc';
+const PALETTE = ['#facc15', '#60a5fa', '#f87171', '#4ade80', '#c084fc', '#fb923c', '#2dd4bf', '#f472b6', '#a3e635', '#94a3b8'];
+const colorOf = (n) => PALETTE[Math.floor((n - 1) / 10) % PALETTE.length];
 
 // ---------- 場景 ----------
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -96,13 +112,28 @@ const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 1.4, 24, 1, t
 scene.add(tube);
 
 const trayY = -2.75, trayZ = 2.9;
-const slotX = (i) => (i < PICKS ? (i - 3) * 0.78 : 2.85 + 0.2);
-const tray = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.12, 0.8), metal);
-tray.position.set(0.2, trayY - r - 0.06, trayZ); tray.castShadow = tray.receiveShadow = true; scene.add(tray);
-const lip = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.25, 0.08), red);
-lip.position.set(0.2, trayY - r + 0.1, trayZ + 0.38); scene.add(lip);
-const divider = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.5, 0.8), new THREE.MeshStandardMaterial({ color: '#facc15', metalness: 0.5, roughness: 0.3 }));
-divider.position.set(2.42, trayY - 0.1, trayZ); scene.add(divider);
+const trayGroup = new THREE.Group();
+scene.add(trayGroup);
+let slotGap = 0.78;
+function slotX(i) {
+  const tot = TOTAL(), gapSp = SPECIAL ? 0.35 : 0;
+  const width = (tot - 1) * slotGap + gapSp;
+  return -width / 2 + i * slotGap + (SPECIAL && i >= PICKS ? gapSp : 0);
+}
+function buildTray() {
+  for (const m of [...trayGroup.children]) { trayGroup.remove(m); m.geometry.dispose(); }
+  slotGap = Math.min(0.78, 6.4 / TOTAL());
+  const w = (TOTAL() - 1) * slotGap + (SPECIAL ? 0.35 : 0) + slotGap + 0.2;
+  const tray = new THREE.Mesh(new THREE.BoxGeometry(w, 0.12, 0.8), metal);
+  tray.position.set(0, trayY - r - 0.06, trayZ); tray.castShadow = tray.receiveShadow = true; trayGroup.add(tray);
+  const lip = new THREE.Mesh(new THREE.BoxGeometry(w, 0.25, 0.08), red);
+  lip.position.set(0, trayY - r + 0.1, trayZ + 0.38); trayGroup.add(lip);
+  if (SPECIAL) {
+    const divider = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.5, 0.8), gold);
+    divider.position.set((slotX(PICKS - 1) + slotX(PICKS)) / 2, trayY - 0.1, trayZ); trayGroup.add(divider);
+  }
+}
+const gold = new THREE.MeshStandardMaterial({ color: '#facc15', metalness: 0.5, roughness: 0.3 });
 
 // ---------- 號碼球 ----------
 function numberTexture(n) {
@@ -123,16 +154,22 @@ function numberTexture(n) {
   return t;
 }
 
-const ballGeo = new THREE.SphereGeometry(r, 32, 24);
-const balls = [];
-for (let n = 1; n <= N; n++) {
-  const m = new THREE.Mesh(ballGeo, new THREE.MeshStandardMaterial({ map: numberTexture(n), roughness: 0.25, metalness: 0.05 }));
-  m.castShadow = true;
-  m.userData = { n, v: new THREE.Vector3(), spin: new THREE.Vector3(), state: 'in', pop: 0 };
-  scene.add(m);
-  balls.push(m);
+let ballGeo = null;
+let balls = [];
+function buildBalls() {
+  for (const b of balls) { scene.remove(b); b.material.map.dispose(); b.material.dispose(); }
+  if (ballGeo) ballGeo.dispose();
+  r = Math.min(0.3, 0.3 * Math.cbrt(49 / N));
+  ballGeo = new THREE.SphereGeometry(r, 32, 24);
+  balls = [];
+  for (let n = 1; n <= N; n++) {
+    const m = new THREE.Mesh(ballGeo, new THREE.MeshStandardMaterial({ map: numberTexture(n), roughness: 0.25, metalness: 0.05 }));
+    m.castShadow = true;
+    m.userData = { n, v: new THREE.Vector3(), state: 'in', pop: 0, base: 1 };
+    scene.add(m);
+    balls.push(m);
+  }
 }
-
 function scatter() {
   for (const b of balls) {
     const d = b.userData;
@@ -144,10 +181,14 @@ function scatter() {
     b.position.copy(C).add(p);
     d.v.set(0, 0, 0); d.state = 'in'; d.anim = null;
     b.rotation.set(Math.random() * 6, Math.random() * 6, Math.random() * 6);
-    b.scale.setScalar(1);
+    d.base = 1; b.scale.setScalar(1);
   }
 }
-scatter();
+function applyConfig() {
+  N = CFG.n; PICKS = CFG.picks; SPECIAL = CFG.special;
+  buildBalls(); buildTray(); scatter();
+  document.getElementById('rule').textContent = `1–${N} 選 ${PICKS} 個號碼${SPECIAL ? '＋1 個特別號' : ''}`;
+}
 
 // ---------- 物理 ----------
 let blowing = 0; // 吹風強度 0~1
@@ -214,15 +255,16 @@ function randInt(max) {
 
 // ---------- 開獎流程 ----------
 const $ = (id) => document.getElementById(id);
-const drawBtn = $('draw'), resetBtn = $('reset'), resultEl = $('result');
+const drawBtn = $('draw'), resetBtn = $('reset'), resultEl = $('result'), setBtn = $('setBtn');
 let drawing = false, drawn = [];
 const wait = (ms) => new Promise((res) => setTimeout(res, ms));
 
 function ballHTML(n, special) {
-  return `<span class="ball${special ? ' special' : ''}" style="background:${colorOf(n)}">${String(n).padStart(2, '0')}</span>`;
+  const sz = Math.max(24, Math.min(40, Math.floor((Math.min(innerWidth, 720) - 60) / (TOTAL() + 1.5)) - 6));
+  return `<span class="ball${special ? ' special' : ''}" style="background:${colorOf(n)};width:${sz}px;height:${sz}px;font-size:${Math.round(sz * 0.42)}px">${String(n).padStart(2, '0')}</span>`;
 }
 function renderResult(done) {
-  const main = drawn.slice(0, PICKS), sp = drawn[PICKS];
+  const main = drawn.slice(0, PICKS), sp = SPECIAL ? drawn[PICKS] : undefined;
   const shown = done ? [...main].sort((a, b) => a - b) : main;
   let h = shown.map((n) => ballHTML(n)).join('');
   if (sp) h += `<span class="plus">特別號</span>${ballHTML(sp, true)}`;
@@ -238,20 +280,21 @@ function launch(b, slot) {
   const p3 = new THREE.Vector3(slotX(slot), trayY, trayZ);              // 軌道位置
   const curve = new THREE.CatmullRomCurve3([p0, p1, p2, new THREE.Vector3((p2.x + p3.x) / 2, trayY + 0.4, trayZ), p3]);
   d.anim = { curve, t: 0, dur: 1.3 };
+  d.base = Math.min(1, (slotGap * 0.92) / (2 * r));
 }
 
 async function startDraw() {
   if (drawing) return;
-  drawing = true; drawBtn.disabled = true; resetBtn.disabled = true;
+  drawing = true; drawBtn.disabled = resetBtn.disabled = setBtn.disabled = true;
   if (drawn.length) { scatter(); drawn = []; await wait(300); }
   renderResult(false);
   blowing = 1;
   await wait(2200);
   const pool = balls.slice();
-  for (let i = 0; i <= PICKS; i++) {
+  for (let i = 0; i < TOTAL(); i++) {
     const b = pool.splice(randInt(pool.length), 1)[0];
     launch(b, i);
-    await wait(1350);
+    await wait(TOTAL() > 8 ? 1000 : 1350);
     drawn.push(b.userData.n);
     renderResult(false);
     await wait(250);
@@ -259,16 +302,16 @@ async function startDraw() {
   blowing = 0;
   renderResult(true);
   saveHistory();
-  drawing = false; drawBtn.disabled = false; resetBtn.disabled = false;
+  drawing = false; drawBtn.disabled = resetBtn.disabled = setBtn.disabled = false;
   drawBtn.textContent = '再開一次';
 }
 drawBtn.addEventListener('click', startDraw);
-resetBtn.addEventListener('click', () => {
-  if (drawing) return;
+function resetAll() {
   scatter(); drawn = []; blowing = 0;
   resultEl.innerHTML = '<span class="hint">按「開獎」開始</span>';
   drawBtn.textContent = '開獎';
-});
+}
+resetBtn.addEventListener('click', () => { if (!drawing) resetAll(); });
 
 // ---------- 紀錄（存在這台裝置） ----------
 const histEl = $('history');
@@ -277,7 +320,8 @@ function saveHistory() {
   const list = loadHistory();
   const main = drawn.slice(0, PICKS).sort((a, b) => a - b).map((n) => String(n).padStart(2, '0')).join(' ');
   const t = new Date();
-  list.unshift(`${t.getMonth() + 1}/${t.getDate()} ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}　${main}　特別號 ${String(drawn[PICKS]).padStart(2, '0')}`);
+  const sp = SPECIAL ? `　特別號 ${String(drawn[PICKS]).padStart(2, '0')}` : '';
+  list.unshift(`${t.getMonth() + 1}/${t.getDate()} ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}　[${N}選${PICKS}]　${main}${sp}`);
   try { localStorage.setItem('lotto-history', JSON.stringify(list.slice(0, 20))); } catch {}
   if (histEl.style.display === 'block') showHistory();
 }
@@ -289,6 +333,32 @@ $('histBtn').addEventListener('click', () => {
   const open = histEl.style.display !== 'block';
   histEl.style.display = open ? 'block' : 'none';
   if (open) showHistory();
+  frameCamera(true);
+});
+
+// ---------- 設定 ----------
+const dlg = $('settings'), inN = $('inN'), inPicks = $('inPicks'), inSp = $('inSp'), hint = $('setHint');
+function syncHint() {
+  const c = fixCfg({ n: inN.value, picks: inPicks.value, special: inSp.checked });
+  inPicks.max = Math.min(LIMITS.maxPicks, c.n - (c.special ? 1 : 0));
+  hint.textContent = `將從 1–${c.n} 號中開出 ${c.picks} 個號碼${c.special ? '，再加 1 個特別號' : ''}`;
+}
+setBtn.addEventListener('click', () => {
+  if (drawing) return;
+  inN.value = CFG.n; inPicks.value = CFG.picks; inSp.checked = CFG.special; syncHint();
+  dlg.style.display = 'flex';
+});
+for (const el of [inN, inPicks, inSp]) el.addEventListener('input', syncHint);
+document.querySelectorAll('[data-preset]').forEach((b) => b.addEventListener('click', () => {
+  const [n, p, sp] = b.dataset.preset.split(',');
+  inN.value = n; inPicks.value = p; inSp.checked = sp === '1'; syncHint();
+}));
+$('setCancel').addEventListener('click', () => (dlg.style.display = 'none'));
+$('setOk').addEventListener('click', () => {
+  CFG = fixCfg({ n: inN.value, picks: inPicks.value, special: inSp.checked });
+  try { localStorage.setItem('lotto-config', JSON.stringify(CFG)); } catch {}
+  dlg.style.display = 'none';
+  applyConfig(); resetAll();
 });
 
 // ---------- 點球互動 ----------
@@ -310,6 +380,8 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
   toastTimer = setTimeout(() => (toast.style.opacity = 0), 900);
 });
 
+applyConfig();
+
 // ---------- 動畫迴圈 ----------
 const clock = new THREE.Clock();
 renderer.setAnimationLoop(() => {
@@ -323,9 +395,10 @@ renderer.setAnimationLoop(() => {
       const e = 1 - Math.pow(1 - d.anim.t, 2);
       b.position.copy(d.anim.curve.getPoint(e));
       b.rotation.z -= dt * 8 * (1 - d.anim.t);
+      b.scale.setScalar(1 + (d.base - 1) * d.anim.t);
       if (d.anim.t >= 1) { d.anim = null; b.rotation.set(0, 0, 0); }
     }
-    if (d.pop > 0) { d.pop = Math.max(0, d.pop - dt * 2.5); b.scale.setScalar(1 + Math.sin(d.pop * Math.PI) * 0.45); }
+    if (d.pop > 0) { d.pop = Math.max(0, d.pop - dt * 2.5); b.scale.setScalar(d.base * (1 + Math.sin(d.pop * Math.PI) * 0.45)); }
   }
   controls.update();
   renderer.render(scene, camera);
@@ -337,4 +410,4 @@ addEventListener('resize', () => {
   controls.minDistance = d * 0.5; controls.maxDistance = d * 1.8;
 });
 
-window.__lotto = { startDraw, get drawn() { return drawn.slice(); }, get drawing() { return drawing; } };
+window.__lotto = { startDraw, get cfg() { return CFG; }, get balls() { return balls.length; }, get drawn() { return drawn.slice(); }, get drawing() { return drawing; } };
