@@ -28,8 +28,8 @@
   .plus { color: #facc15; font-weight: 700; font-size: 13px; margin: 0 2px; }
   .hint { color: #94a3b8; font-size: 14px; }
   @keyframes pop { from { transform: scale(0); } to { transform: scale(1); } }
-  #btns { display: flex; justify-content: center; gap: 10px; margin-top: 10px; }
-  button { min-height: 46px; min-width: 96px; padding: 0 18px; border: 0; border-radius: 23px; font-size: 17px; font-weight: 700;
+  #btns { display: flex; justify-content: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  button { min-height: 46px; min-width: 76px; padding: 0 18px; border: 0; border-radius: 23px; font-size: 17px; font-weight: 700;
     cursor: pointer; color: #fff; background: #334155; font-family: inherit; }
   button.primary { background: linear-gradient(#ef4444, #b91c1c); box-shadow: 0 4px 14px rgba(239,68,68,.45); }
   button:disabled { opacity: .45; cursor: default; }
@@ -38,6 +38,16 @@
   #toast { position: fixed; top: 38%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,.75); padding: 10px 18px;
     border-radius: 12px; font-size: 20px; font-weight: 700; opacity: 0; transition: opacity .3s; pointer-events: none; }
   #note { font-size: 11px; color: #64748b; margin-top: 6px; }
+  #settings { position: fixed; inset: 0; background: rgba(2,6,23,.7); display: none; align-items: center; justify-content: center; z-index: 10; padding: 16px; }
+  #settings .box { background: #1e293b; border-radius: 18px; padding: 20px; width: min(360px, 100%); box-shadow: 0 10px 40px rgba(0,0,0,.6); }
+  #settings h2 { margin: 0 0 12px; font-size: 19px; }
+  #settings label { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0; font-size: 16px; }
+  #settings input[type=number] { width: 96px; min-height: 44px; font-size: 18px; text-align: center; border-radius: 10px; border: 1px solid #475569; background: #0f172a; color: #f1f5f9; }
+  #settings input[type=checkbox] { width: 26px; height: 26px; accent-color: #ef4444; }
+  #presets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+  #presets button { min-height: 36px; min-width: 0; padding: 0 12px; font-size: 14px; border-radius: 18px; background: #334155; }
+  #setHint { font-size: 13px; color: #94a3b8; min-height: 18px; }
+  #settings .row { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
 </style>
 <script type="importmap">
 { "imports": {
@@ -49,7 +59,7 @@
 <body>
 <div id="top">
   <h1>大樂透開獎機</h1>
-  <p>1–49 選 6 個號碼＋1 個特別號｜拖曳旋轉・雙指縮放・點球看號碼</p>
+  <p><span id="rule">1–49 選 6 個號碼＋1 個特別號</span>｜拖曳旋轉・雙指縮放・點球看號碼</p>
 </div>
 <div id="toast"></div>
 <div id="panel">
@@ -58,9 +68,25 @@
     <button id="draw" class="primary">開獎</button>
     <button id="reset">重來</button>
     <button id="histBtn">紀錄</button>
+    <button id="setBtn">設定</button>
   </div>
   <div id="history"></div>
   <div id="note">隨機選號僅供娛樂參考</div>
+</div>
+<div id="settings">
+  <div class="box">
+    <h2>開獎設定</h2>
+    <div id="presets">
+      <button data-preset="49,6,1">大樂透 49選6</button>
+      <button data-preset="38,6,0">威力彩 38選6</button>
+      <button data-preset="39,5,0">今彩539</button>
+    </div>
+    <label>總球數（2–99）<input id="inN" type="number" min="2" max="99" inputmode="numeric"></label>
+    <label>開出號碼數（1–12）<input id="inPicks" type="number" min="1" max="12" inputmode="numeric"></label>
+    <label>另開 1 個特別號<input id="inSp" type="checkbox"></label>
+    <div id="setHint"></div>
+    <div class="row"><button id="setCancel">取消</button><button id="setOk" class="primary">套用</button></div>
+  </div>
 </div>
 <script type="module" src="app.js"></script>
 <script>
